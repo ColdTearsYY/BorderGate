@@ -1,0 +1,199 @@
+world: world
+border:
+  initial-size: 3000.0
+  minimum-size: 1000.0
+  # Initial/base ceiling; monthly tasks persist a multiplier in data.yml.
+  maximum-size: 12000.0
+  expand-by: 256.0
+  shrink-by: 128.0
+  transition-seconds: 30
+  initial-center-x: 0.0
+  initial-center-z: 0.0
+# Defaults retain existing UTC midnight rollover. Shanghai 04:00: Asia/Shanghai / 4.
+schedule:
+  timezone: UTC
+  rollover-hour: 0
+  settle-on-completion: true
+# No targets table is needed in automatic mode. Overrides below are optional.
+automation:
+  enabled: true
+  daily-range-percent: 1.0
+  weekly-range-percent: 4.0
+  excluded-resources: []
+# Cooperative guidance works without MCP or an external economy.
+cooperation:
+  enabled: true
+  reminders:
+    enabled: true
+  adaptive:
+    enabled: true
+
+tasks:
+  daily:
+    enabled: true
+    source: auto
+    title: '&a每日边界维护'
+    score-multiplier: 1.0
+    border-transition-seconds: 30
+    # Used only when source: manual (or automation.enabled: false).
+    required-count: 2
+    select-random: 0
+    border-expand: 128.0
+    border-shrink: 64.0
+    targets:
+      item:DIAMOND: 16
+      vault: 1000
+      playerpoints: 100
+      playercurrency:coin: 50
+    rewards:
+      mode: pool
+      per-player: 10
+      amount-scale: 0
+      # Optional currency command, e.g. playercurrency give {player} coin {amount}
+      commands: []
+  weekly:
+    enabled: true
+    source: auto
+    title: '&6每周边界远征'
+    score-multiplier: 3.0
+    border-transition-seconds: 120
+    # Manual-mode fallback only; automatic templates have their own conditions.
+    required-count: 3
+    select-random: 4
+    border-expand: 512.0
+    border-shrink: 256.0
+    targets:
+      item:DIAMOND: 128
+      item:EMERALD: 256
+      vault: 25000
+      playerpoints: 1500
+      playercurrency:coin: 1000
+    rewards:
+      mode: pool
+      per-player: 50
+      amount-scale: 0
+      commands: []
+  monthly:
+    enabled: true
+    source: auto
+    title: '&d每月疆域建设'
+    score-multiplier: 6.0
+    # +/- percent of the current effective ceiling, NOT current border size.
+    maximum-change-percent: 5.0
+    border-transition-seconds: 120
+    rewards:
+      mode: pool
+      per-player: 0
+      amount-scale: 0
+      commands: []
+resources:
+  # Optional display labels; item names otherwise follow the Minecraft client language.
+  names:
+    vault: '金币'
+    playerpoints: '点券'
+    playercurrency:coin: '金币'
+  weights:
+    item:DIAMOND: 1.0
+    item:EMERALD: 0.7
+    vault: 0.1
+    playerpoints: 0.25
+    playercurrency:coin: 0.2
+gui:
+  # NPC-first: console opens with `bordergate open <player>`; joining never opens by default.
+  # If enabled, both bordergate.command and bordergate.use are required, including after delay.
+  open-on-join: false
+  deposit-amount: 1
+  home-title: '&8&l边界稳定器'
+  task-title: '&8&l{title} &7| &b{percent}%'
+  history-title: '&8&l守护者排行榜'
+  admin-title: '&8&l边界稳定器管理'
+  daily-name: '&a&l每日守护任务'
+  weekly-name: '&6&l每周远征任务'
+  monthly-name: '&d&l每月拓疆任务'
+  history-name: '&b&l守护者排行榜'
+  admin-name: '&c&l管理控制台'
+  admin-lore: '&7查看服务器任务和调整边界'
+  history-lore: '&7查看当前任务的贡献分红榜'
+  network-name: '&d&l全服任务'
+  network-title: '&8&l全服任务查询'
+  network-lore: '&7查看并提交其他服务器的任务'
+  network-task-name: '&f[{server}] &b{title}'
+  network-task-lore: '&7{cadence} | {progress}'
+  network-empty: '&c当前没有可用的全服任务'
+  progress-line: '&7完成目标种类: &f{done}/{required} &8({percent}%)'
+  expiry-line: '&7本期截止时间: &f{time}'
+  task-effect: '&7{effect}'
+  border-bounds: '&7下限 {min} / 当前总上限 {max}'
+  monthly-effect-lore: '&7完成提高总上限，未完成降低总上限'
+  no-task: '&c该周期暂无可用任务'
+  task-caption: '&f{title}'
+  task-disabled: '&7本服已停用{cadence}'
+  task-no-template: '&c{cadence}暂不可用：没有可用的资源模板'
+  task-no-targets: '&c{cadence}暂不可用：手动目标为空或无效'
+  task-pending: '&e{cadence}正在准备，请稍后刷新'
+  resource-name: '&e&l{resource}'
+  resource-progress: '&7当前进度: &f{done}/{target}'
+  resource-click: '&a点击投入配置数量'
+  resource-shift-click: '&bShift+点击投入背包内全部匹配物品'
+  land-claim-click: '&b右键个人认领；Shift+右键 Lands 领地认领'
+  lands-name: '&d我的 Lands 领地'
+  lands-title: '&8我的 Lands 协作领地'
+  lands-open: '&7选择协作领地、查看领地贡献'
+  lands-empty: '&7暂无有权限的 Lands 领地'
+  lands-manage-name: '&bLands 成员关系'
+  towns-name: '&6城镇贡献榜'
+  towns-title: '&8本服城镇贡献榜'
+  towns-open: '&7查看本服所有有贡献的 Lands 城镇'
+  towns-empty: '&7暂无有贡献的城镇'
+  towns-unavailable: '&cLands API 暂不可用'
+  towns-refresh: '&e刷新城镇榜'
+  town-rank-name: '&f#{rank} &b{name}'
+  back-name: '&e返回主面板'
+  task-status: '&b完成条件'
+  task-required: '&7至少完成 &f{required}/{total} &7种目标'
+  leaderboard-name: '&b贡献排行榜'
+  leaderboard-lore: '&7贡献越多，奖励分红占比越高'
+  rank-name: '&f第{rank}名 &b{name}'
+  rank-score: '&7守护分: &f{score}'
+  rank-percent: '&7奖励占比: &f{percent}%'
+  settle-daily: '&a立即结算每日任务'
+  settle-weekly: '&6立即结算每周任务'
+  settle-monthly: '&d立即结算每月任务'
+  reload: '&e重载任务配置'
+  border-size: '&b当前边界直径: &f{size}'
+  border-status: '&7{status}'
+  shrink: '&c边界收缩 128 格'
+  expand: '&a边界扩张 128 格'
+messages:
+  command-denied: '&e可用 /bg view 查看日、周、月任务；提交请前往并点击边界维护员 NPC。'
+  no-task: '&c此周期暂无可用任务。'
+  reloaded: '&aBorderGate 配置和任务已重载。'
+integrations:
+  lands: true
+  vault: true
+  playerpoints: true
+  playercurrency: true
+  chunky: true
+  chunky-border: true
+  chunky-border-initial-shape: square
+  allow-downgrade-when-provider-missing: true
+economy-recommendation:
+  baseline-vault-balance: 1000000
+  minimum-multiplier: 1.0
+  maximum-multiplier: 20.0
+network:
+  enabled: true
+  server-id: server-1
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    database: bordergate
+    username: bordergate
+    password: bordergate
+    use-ssl: false
+  redis:
+    enabled: true
+    host: 127.0.0.1
+    port: 6379
+    password: ''
+    channel: bordergate:updates

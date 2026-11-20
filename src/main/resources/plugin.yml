@@ -1,0 +1,22 @@
+name: BorderGate
+version: '${project.version}'
+main: dev.bordergate.BorderGatePlugin
+api-version: '26.3'
+folia-supported: true
+description: Community-powered world border maintenance
+softdepend: [Vault, PlayerPoints, PlayerCurrency, Chunky, ChunkyBorder, Lands]
+commands:
+  bordergate:
+    description: BorderGate community boundary controls
+    usage: /bordergate <view|status|donate|guide|lands|towns|reminders|cooperation|settle|reset|initialize|setsize|recommend|reload|open>
+    aliases: [bgate, bg]
+permissions:
+  bordergate.use:
+    description: View status and contribute resources
+    default: true
+  bordergate.command:
+    description: Use full player-typed commands; view only needs bordergate.use, NPC menus do not need this
+    default: op
+  bordergate.admin:
+    description: Administer BorderGate
+    default: op

@@ -1,0 +1,32 @@
+# Build outputs and dependency caches
+/target/
+/Temp/
+/.temp/
+/.trashbin/
+/.trash/
+/.m2*/
+/.gradle/
+*.class
+*.jar
+
+# Local IDE and OS files
+/.idea/
+/.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Runtime state, logs and local secrets
+/plugins/
+/world/
+/world_nether/
+/world_the_end/
+*.log
+*.dump
+*.dumpstream
+.env
+.env.*
+*.key
+*.pem
+*.jks
+*.keystore
