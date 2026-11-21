@@ -149,7 +149,7 @@ final class QuestService {
             refreshNetworkTasks();
             history.add(new HistoryEntry(taskId, cycle.cadence(), player.getUniqueId(), player.getName(), resource, amount, score, System.currentTimeMillis()));
             save();
-            if (plugin.cooperation() != null) plugin.cooperation().contributed(player, taskId, resource, amount, score, previousRemaining, "network:" + reservation.id());
+            contributionFeedback(player, taskId, resource, amount, score, previousRemaining, "network:" + reservation.id());
             if (settleOnCompletion() && cycle.isComplete() && taskId.startsWith(store.serverId() + ":")) plugin.settleQuest(taskId, true);
             return EconomyBridge.Result.SUCCESS;
         }
@@ -160,10 +160,24 @@ final class QuestService {
         BigDecimal earned = cycle.score(player.getUniqueId()).subtract(before);
         history.add(new HistoryEntry(taskId, cycle.cadence(), player.getUniqueId(), player.getName(), resource, amount, earned, System.currentTimeMillis()));
         save();
-        if (plugin.cooperation() != null) plugin.cooperation().contributed(player, taskId, resource, amount, earned, previousRemaining, "local:" + UUID.randomUUID());
+        contributionFeedback(player, taskId, resource, amount, earned, previousRemaining, "local:" + UUID.randomUUID());
         plugin.onQuestProgress(taskId);
         if (settleOnCompletion() && cycle.isComplete()) plugin.settleQuest(taskId, true);
         return EconomyBridge.Result.SUCCESS;
+    }
+
+    private void contributionFeedback(Player player, String taskId, String resource, BigDecimal amount,
+                                      BigDecimal score, BigDecimal previousRemaining, String eventId) {
+        var feedback = plugin.cooperation() == null ? null : plugin.cooperation().contributed(
+                player, taskId, resource, amount, score, previousRemaining, eventId);
+        QuestCycle cycle = cycles.get(taskId);
+        BigDecimal target = cycle.targets().get(resource);
+        // Include this committed payment even if a network snapshot refresh temporarily failed.
+        BigDecimal done = cycle.contributed().getOrDefault(resource, BigDecimal.ZERO)
+                .max(target.subtract(previousRemaining).add(amount)).min(target);
+        player.sendMessage(ContributionMessage.create(ResourceDisplay.name(resource, plugin.getConfig()),
+                amount, score, cycle.cadence(), cycle.title(), done, target,
+                amount.compareTo(previousRemaining) >= 0, feedback));
     }
 
     private boolean settleOnCompletion() {

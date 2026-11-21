@@ -11,6 +11,13 @@ final class ResourceDisplay {
 
     private ResourceDisplay() {}
 
+    static Component name(String resource, org.bukkit.configuration.ConfigurationSection config) {
+        return name(resource, id -> config.getString("resources.names." + id), materialName -> {
+            org.bukkit.Material material = org.bukkit.Material.matchMaterial(materialName);
+            return material != null && material.isItem() && !material.isAir() ? material.translationKey() : null;
+        });
+    }
+
     static Component name(String resource, Function<String, String> configuredNames,
                           Function<String, String> itemTranslationKeys) {
         String configured = configuredNames.apply(resource);

@@ -211,14 +211,14 @@ final class CooperationService {
         notifyPlayers(taskId, "near", "&b“" + player.getName() + "”邀请伙伴协作：" + cycle.title() + "。可用 /bg view 查询日、周、月任务；提交请前往并点击边界维护员 NPC。", player.getUniqueId());
         player.sendMessage(plugin.colorMessage("&a已请求低频邀请；仅开启提醒、通过冷却的在线伙伴会收到。"));
     }
-    void contributed(Player player, String taskId, String resource, BigDecimal amount, BigDecimal score,
+    CooperationLedger.Feedback contributed(Player player, String taskId, String resource, BigDecimal amount, BigDecimal score,
                      BigDecimal previousRemaining, String eventId) {
-        if (!enabled()) return;
+        if (!enabled()) return null;
         long now = System.currentTimeMillis();
         LandAffiliation land = selectedLand(player.getUniqueId());
         var feedback = ledger.recordContribution(eventId, player.getUniqueId(), day(now), score,
                 previousRemaining.signum() > 0 && amount.compareTo(previousRemaining) >= 0, land);
-        if (feedback == null) return;
+        if (feedback == null) return null;
         claims(taskId); // Revoke only positively confirmed invalid local Lands plans before fulfilment.
         String landId = land == null ? "" : land.id();
         if (sharedClaims()) { if (shared != null && shared.available()) shared.fulfil(taskId, resource, player.getUniqueId(), landId, amount, now); }
@@ -228,14 +228,7 @@ final class CooperationService {
         if (cycle != null && (cycle.isComplete() || cycle.remaining(resource).signum() == 0)) closeClaims(taskId, cycle.isComplete() ? null : resource);
         synchronized (this) { if (cycle != null && cycle.isComplete()) completed.putIfAbsent(taskId, now); }
         save();
-        if (feedback != null) {
-            String message = "&a感谢你提供 " + resource + " × " + number(amount) + "，贡献分 +" + number(score);
-            if (feedback.firstParticipation()) message += " &6[首次参与]";
-            if (feedback.finishedResource()) message += " &b[补齐资源]";
-            message += " &7连续参与 " + feedback.streak() + " 天";
-            if (!feedback.landName().isEmpty()) message += " | Lands 领地：" + feedback.landName();
-            player.sendMessage(plugin.colorMessage(message));
-        }
+        return feedback;
     }
     private void closeClaims(String taskId, String resource) {
         if (sharedClaims()) { if (shared != null && shared.available()) shared.close(taskId, resource); }

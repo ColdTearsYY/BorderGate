@@ -68,7 +68,7 @@ final class BorderGateCommand implements CommandExecutor, TabCompleter {
             catch (NumberFormatException ex) { sender.sendMessage("资源数量无效。"); return true; }
             EconomyBridge.Result result = plugin.questService().contribute(player, plugin.questService().currentTaskId(cadence), args[1], amount);
             switch (result) {
-                case SUCCESS -> sender.sendMessage(ChatColor.GREEN + "投入成功，任务进度已保存。");
+                case SUCCESS -> { /* QuestService sends the single contribution receipt. */ }
                 case INSUFFICIENT -> sender.sendMessage(ChatColor.RED + "资源不足或支付服务拒绝了交易。");
                 case UNAVAILABLE -> sender.sendMessage(ChatColor.RED + "该资源的经济插件未安装、未启用或 API 不可用。");
                 case INVALID -> sender.sendMessage(ChatColor.RED + "资源类型/数量无效、任务已结算，或本次投入会超过剩余目标。");

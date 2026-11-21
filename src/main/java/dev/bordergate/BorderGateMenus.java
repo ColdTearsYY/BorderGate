@@ -354,7 +354,7 @@ final class BorderGateMenus implements Listener {
         if(displayed!=null)amount=amount.min(displayed);
         if(amount.signum()<=0){player.sendMessage(text("gui.no-deposit","&e没有可投入数量，任务已变化或背包不足。"));return;}
         var result=plugin.questService().contribute(player,id,resource,amount);
-        player.sendMessage(plugin.colorMessage(switch(result){case SUCCESS->"&a投入成功，任务与贡献记录已保存。";case INSUFFICIENT->"&c资源不足或经济服务拒绝了交易。";case UNAVAILABLE->"&c资源或网络服务当前不可用。";case INVALID->"&c任务已完成、到期或数量超过剩余目标。";}));
+        if(result!=EconomyBridge.Result.SUCCESS) player.sendMessage(plugin.colorMessage(switch(result){case SUCCESS->throw new IllegalStateException("Success is reported by QuestService");case INSUFFICIENT->"&c资源不足或经济服务拒绝了交易。";case UNAVAILABLE->"&c资源或网络服务当前不可用。";case INVALID->"&c任务已完成、到期或数量超过剩余目标。";}));
     }
     private void handleAdmin(Player player,int slot) {
         if(!player.hasPermission("bordergate.admin")){openHome(player);return;}
@@ -365,10 +365,7 @@ final class BorderGateMenus implements Listener {
     private Material material(String resource) {Material material=resource.startsWith("item:")?Material.matchMaterial(resource.substring(5)):null;return material!=null&&material.isItem()?material:resource.equals("vault")?Material.GOLD_INGOT:Material.AMETHYST_SHARD;}
     private String num(BigDecimal value) {return CooperationService.number(value);}
     private Component resourceName(String resource) {
-        return ResourceDisplay.name(resource,r->plugin.getConfig().getString("resources.names."+r),name->{
-            Material item=Material.matchMaterial(name);
-            return item!=null&&item.isItem()&&!item.isAir()?item.translationKey():null;
-        });
+        return ResourceDisplay.name(resource,plugin.getConfig());
     }
     private void set(Inventory inventory,int slot,Material material,Component name,List<Component> lore) {
         ItemStack stack=new ItemStack(material); ItemMeta meta=stack.getItemMeta();

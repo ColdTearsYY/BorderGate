@@ -5,13 +5,19 @@ BorderGate 将世界边界维护做成每日、每周、每月协作任务。默
 ## 安装与首次配置
 
 1. 使用 Java 25 和 Maven 执行 `mvn clean verify`。
-2. 将 `target/bordergate-0.1.0.jar` 安装到 Folia/Lophine 服务器的 `plugins` 目录并启动。
+2. 将 `target/bordergate-0.1.1.jar`（或 GitHub Release 的同版本 JAR）安装到 Folia/Lophine 服务器的 `plugins` 目录并启动。
 3. 确认管理世界和 `border.minimum-size`、`border.maximum-size`。自动运营默认开启，不必填写任务目标、固定扩张值或经济命令。
 4. 普通玩家默认点击配置好的 NPC 打开菜单；OP 或同时有 `bordergate.use`、`bordergate.command` 的玩家可输入 `/bg`。默认入服不自动弹菜单。菜单文字支持 `&` 颜色码，缺项使用内置默认值。
 
 第一次使用先读 [首次使用与状态排查](docs/getting-started.md) 和 [NPC 入口配置](docs/npc-entry.md)。插件加载后自动运行，没有“开始”命令；管理员执行 `/bg status`（控制台 `bg status`）确认边界来源／是否暂停，再通过菜单投入任务。已有边界不会因加载立即改变；正常增减发生在任务结算，ChunkyBorder 与原版边界不同时同步。
 
 Vault、PlayerPoints、PlayerCurrency、Chunky 和 ChunkyBorder 均为可选插件。自动任务只使用物品，不依赖经济插件；货币奖励命令默认留空，需要发币时再显式配置。手动资源支持 `item:MATERIAL`、`vault`、`playerpoints`、`playercurrency:<type>`。PlayerCurrency 的目标、扣款和奖励精度必须是整数。
+
+## 0.1.1 投入反馈优化
+
+成功提交只发送一次两行反馈，物品名称与 GUI 共用客户端翻译和服务器自定义名称；本次贡献分最多显示两位小数，不改变记账精度。第二行显示周期与资源进度，仅在适用时提示首次参与、补齐和实际城镇归属；任务名称与连续参与天数放在悬停详情。任务面板、推荐面板、命令及关闭合作引导时共用成功反馈，支付失败不会发送成功提示。
+
+升级保留全部配置、状态文件与数据库，停服替换旧 JAR 后启动，不同时保留两份 BorderGate 插件。本次发布只提供源码和 Release 下载，未部署到 1、2 区服务器。
 
 ## 默认自动运营
 
@@ -106,6 +112,8 @@ ChunkyBorder 的官方 API 没有时长参数，上述过渡配置只作用于�
 参考：[Bukkit WorldBorder API](https://jd.papermc.io/paper/26.3/org/bukkit/WorldBorder.html)、[ChunkyBorder 官方 API](https://github.com/pop4959/ChunkyBorder/blob/master/common/src/main/java/org/popcraft/chunkyborder/api/ChunkyBorderAPI.java)。跨数据库结算、外部边界 API 和状态文件无法构成一个原子事务，故障恢复仍应核对日志，不保证崩溃窗口内严格 exactly-once。
 
 ## 验证与限制
+
+0.1.1 投入反馈版通过 Java25 `mvn verify` 的 **213 项测试**（0 失败／错误／跳过），以及原版＋真实 Chunky／ChunkyBorder 的 **402 项隔离检查、8 次采样、4 次正常退出**。覆盖消息去重、鹦鹉螺壳翻译、自定义名称、数字精度、关闭合作引导、失败路径及原 NPC／Lands／城镇榜／重载／重启回归。使用合成玩家／调度器和官方 LandsAPI 夹具；未进行真人、实际 FancyNpcs／Lands9.3.0 或生产 MySQL 端到端联调。仅发布 GitHub 源码与 Release，1、2 区未部署。下方记录均对应历史包。
 
 NPC 入口版通过 Java 25 `mvn verify` 的 **196 项测试**，0 失败／错误／跳过；新包通过原版＋真实 Chunky／ChunkyBorder 的 **376 项隔离检查、8 次采样**，4 次正常启动／重启并 stop 退出。覆盖主命令／别名／命名空间拒绝、无权限补全、控制台精确目标代开、离线／撤权／调度器退出、旧入服弹窗配置、仅使用权限下菜单投料／认领／翻页、管理员权限独立，以及 Bug1、Lands 和城镇榜回归。证据见 `Temp/npc-entry/build-r2.log`、`Temp/npc-entry/result-r2.json` 和 `Temp/npc-entry/verification.md`。首轮探针计数断言失败记录保留，不计入最终通过。
 
