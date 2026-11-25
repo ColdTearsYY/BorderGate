@@ -36,7 +36,8 @@ tasks:
     score-multiplier: 1.0
     target-multiplier: 1.0
     automatic-template: ''
-    target-multipliers: {}
+    target-multipliers:
+      'item:FEATHER': 0.3333333333333333
     # Optional; omit to use the selected built-in template's default.
     # automatic-required-count: 2
     border-transition-seconds: 30

@@ -36,6 +36,7 @@ Vault、PlayerPoints、PlayerCurrency、Chunky 和 ChunkyBorder 均为可选插�
 ### 不重启调整后续周期任务
 
 自动任务可按日／周／月分别配置，修改 `plugins/BorderGate/config.yml` 后执行 `/bg reload`（需要管理员权限），无需重启 Minecraft。重载不会重抽或修改当前已发布任务的目标、倍率、进度、期限，也不会重开历史周期；新设置从该周期**下一次生成任务**时起生效。若希望改下一周或下月任务，可提前调整后重载。
+0.1.3 默认将每日自动任务的 `item:FEATHER` 目标倍率设为三分之一；按目标向上取整，羽毛目标约为此前的 1/3。周／月保持原设置。
 
 每周期可配置：`score-multiplier` 调整贡献评分倍率；`target-multiplier` 等比例缩放自动模板全部目标；`target-multipliers` 可单独调整指定资源目标；`automatic-template` 可固定一个内置模板 ID（留空表示自动轮换）；`automatic-required-count` 可选覆盖完成所需资源种类数。倍率必须大于 0 且不超过 100；物品与 PlayerCurrency 数量向上取整为整数，至少 1。自动适应倍率仍会与手动 `target-multiplier` 相乘。
 

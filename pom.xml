@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.bordergate</groupId>
   <artifactId>bordergate</artifactId>
-  <version>0.1.2</version>
+  <version>0.1.3</version>
   <name>BorderGate</name>
   <description>Community-powered world border maintenance for Folia</description>
   <properties>
