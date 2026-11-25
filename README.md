@@ -33,10 +33,27 @@ Vault、PlayerPoints、PlayerCurrency、Chunky 和 ChunkyBorder 均为可选插�
 
 任务生成后，模板、目标、完成条件、期限和月度比例保存至 `quests.yml`；查询、重载、重启不重抽。已有旧任务沿用保存的期限和日／周结算策略，新周期才进入自动模式。需要手动覆盖时设 `tasks.<周期>.source: manual`，或关闭 `automation.enabled`；此时日／周的 `targets`、`required-count`、`select-random`、`border-expand`、`border-shrink` 生效。
 
+### 不重启调整后续周期任务
+
+自动任务可按日／周／月分别配置，修改 `plugins/BorderGate/config.yml` 后执行 `/bg reload`（需要管理员权限），无需重启 Minecraft。重载不会重抽或修改当前已发布任务的目标、倍率、进度、期限，也不会重开历史周期；新设置从该周期**下一次生成任务**时起生效。若希望改下一周或下月任务，可提前调整后重载。
+
+每周期可配置：`score-multiplier` 调整贡献评分倍率；`target-multiplier` 等比例缩放自动模板全部目标；`target-multipliers` 可单独调整指定资源目标；`automatic-template` 可固定一个内置模板 ID（留空表示自动轮换）；`automatic-required-count` 可选覆盖完成所需资源种类数。倍率必须大于 0 且不超过 100；物品与 PlayerCurrency 数量向上取整为整数，至少 1。自动适应倍率仍会与手动 `target-multiplier` 相乘。
+
+例如只降低每日海洋主题的鹦鹉螺壳需求：
+
+```yaml
+tasks:
+  daily:
+    target-multiplier: 1.0
+    target-multipliers:
+      'item:NAUTILUS_SHELL': 0.5
+    score-multiplier: 1.0
+```
+
+配置校验失败时，新周期不会生成无效任务，当前发布任务保持不变；查看控制台警告并修正后再次 `/bg reload`。MySQL 网络模式下，任务仍由所属服务器创建，倍率随快照保存；旧版本数据库由插件启动时自动补充可空倍率列，不会重写既有任务。
 ### 月任务调整本服总上限
 
 完成：当前总上限 × 1.05；未完成：当前总上限 × 0.95。`tasks.monthly.maximum-change-percent` 默认 5，可选覆盖。调整不低于下限，也不超过后端允许值；完成通常只提高上限，不直接扩当前直径。失败后若当前直径超过新上限，使用原后端收回。
-
 有效总上限为 `border.maximum-size × data.yml 中的 border.maximum-multiplier`，本服独立保存，月任务应用收据防止重试重复叠比例。改基础 `maximum-size` 会同比改变有效上限，操作前应备份状态；不要删除 `data.yml` 来日常升级。外部 API、状态文件和 MySQL 不构成严格原子事务，异常恢复需要核对日志。
 
 ### 周期与手动奖励

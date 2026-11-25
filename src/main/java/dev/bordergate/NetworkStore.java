@@ -25,7 +25,8 @@ final class NetworkStore implements AutoCloseable {
                         int requiredCount, Map<String, BigDecimal> targets,
                         Map<String, BigDecimal> contributed, Map<UUID, BigDecimal> scores, String status,
                         BigDecimal rewardPerPlayer, String rewardMode, int rewardScale,
-                        String templateId, boolean automaticBorder, double maximumChangePercent) {}
+                        String templateId, boolean automaticBorder, double maximumChangePercent,
+                        BigDecimal scoreMultiplier) {}
 
     record Reservation(long id, String taskId, UUID playerId, String resource, BigDecimal amount, BigDecimal score) {}
 
@@ -65,6 +66,7 @@ final class NetworkStore implements AutoCloseable {
             addColumnIfMissing(connection, "reward_per_player", "DECIMAL(30,6) NOT NULL DEFAULT 0");
             addColumnIfMissing(connection, "reward_mode", "VARCHAR(16) NOT NULL DEFAULT 'fixed'");
             addColumnIfMissing(connection, "reward_scale", "INT NOT NULL DEFAULT 2");
+            addColumnIfMissing(connection, "score_multiplier", "DECIMAL(30,8) NULL");
             addColumnIfMissing(connection, "template_id", "VARCHAR(80) NOT NULL DEFAULT 'manual'");
             addColumnIfMissing(connection, "automatic_border", "BOOLEAN NOT NULL DEFAULT FALSE");
             addColumnIfMissing(connection, "maximum_change_percent", "DOUBLE NOT NULL DEFAULT 5");
@@ -98,7 +100,7 @@ final class NetworkStore implements AutoCloseable {
     void syncTask(QuestCycle cycle, long endsAt, BigDecimal rewardPerPlayer, String rewardMode, int rewardScale,
                   String templateId, boolean automaticBorder, double maximumChangePercent) {
         if (!available || cycle == null) return;
-        String insert = "INSERT INTO bordergate_task(task_id,server_id,cadence,title,ends_at,required_count,reward_pool,reward_per_player,reward_mode,reward_scale,status,updated_at,template_id,automatic_border,maximum_change_percent) VALUES(?,?,?,?,?,?,0,?,?,?,'ACTIVE',?,?,?,?) ON DUPLICATE KEY UPDATE task_id=task_id";
+        String insert = "INSERT INTO bordergate_task(task_id,server_id,cadence,title,ends_at,required_count,reward_pool,reward_per_player,reward_mode,reward_scale,status,updated_at,template_id,automatic_border,maximum_change_percent,score_multiplier) VALUES(?,?,?,?,?,?,0,?,?,?,'ACTIVE',?,?,?,?,?) ON DUPLICATE KEY UPDATE task_id=task_id";
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
             try {
@@ -111,9 +113,9 @@ final class NetworkStore implements AutoCloseable {
                     statement.setInt(9, Math.max(0, Math.min(rewardScale, 8)));
                     statement.setLong(10, System.currentTimeMillis());
                     statement.setString(11, templateId); statement.setBoolean(12, automaticBorder);
-                    statement.setDouble(13, maximumChangePercent); statement.executeUpdate();
+                    statement.setDouble(13, maximumChangePercent); statement.setBigDecimal(14, cycle.scoreMultiplier());
+                    statement.executeUpdate();
                 }
-                // Definitions are immutable once targets exist. The task-row write locks concurrent creators.
                 boolean initialized;
                 try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*) FROM bordergate_target WHERE task_id=?")) {
                     query.setString(1, cycle.id());
@@ -132,82 +134,54 @@ final class NetworkStore implements AutoCloseable {
         } catch (SQLException ex) { plugin.getLogger().warning("Could not sync task " + cycle.id() + ": " + ex.getMessage()); }
     }
 
-    Reservation reserve(String taskId, UUID uuid, String playerName, String resource, BigDecimal amount, BigDecimal score) {
+    Reservation reserve(String taskId, UUID uuid, String playerName, String resource, BigDecimal amount, BigDecimal score,
+                        BigDecimal expectedMultiplier, BigDecimal expectedTarget) {
         if (!available) return null;
         try (Connection connection = connect()) {
             connection.setAutoCommit(false);
             try {
-                try (PreparedStatement lock = connection.prepareStatement("SELECT status FROM bordergate_task WHERE task_id=? FOR UPDATE")) {
+                BigDecimal publishedMultiplier;
+                try (PreparedStatement lock = connection.prepareStatement("SELECT status,score_multiplier FROM bordergate_task WHERE task_id=? FOR UPDATE")) {
                     lock.setString(1, taskId);
                     try (ResultSet row = lock.executeQuery()) {
-                        if (!row.next() || !row.getString(1).equals("ACTIVE")) {
-                            connection.rollback();
-                            return null;
-                        }
+                        if (!row.next() || !row.getString(1).equals("ACTIVE")) { connection.rollback(); return null; }
+                        publishedMultiplier = row.getBigDecimal(2);
                     }
                 }
+                if (publishedMultiplier != null && publishedMultiplier.compareTo(expectedMultiplier) != 0) { connection.rollback(); return null; }
                 BigDecimal target;
                 try (PreparedStatement query = connection.prepareStatement("SELECT target_amount FROM bordergate_target WHERE task_id=? AND resource=?")) {
-                    query.setString(1, taskId);
-                    query.setString(2, resource);
+                    query.setString(1, taskId); query.setString(2, resource);
                     try (ResultSet row = query.executeQuery()) {
-                        if (!row.next()) {
-                            connection.rollback();
-                            return null;
-                        }
+                        if (!row.next()) { connection.rollback(); return null; }
                         target = row.getBigDecimal(1);
                     }
                 }
+                if (target.compareTo(expectedTarget) != 0) { connection.rollback(); return null; }
                 try (PreparedStatement expire = connection.prepareStatement(
                         "UPDATE bordergate_contribution SET status='CANCELLED' WHERE task_id=? AND status='PENDING' AND created_at<?")) {
-                    expire.setString(1, taskId);
-                    expire.setLong(2, System.currentTimeMillis() - 300_000L);
-                    expire.executeUpdate();
+                    expire.setString(1, taskId); expire.setLong(2, System.currentTimeMillis() - 300_000L); expire.executeUpdate();
                 }
                 BigDecimal current;
                 try (PreparedStatement query = connection.prepareStatement(
                         "SELECT COALESCE(SUM(amount),0) FROM bordergate_contribution WHERE task_id=? AND resource=? AND status IN ('PENDING','COMMITTED')")) {
-                    query.setString(1, taskId);
-                    query.setString(2, resource);
-                    try (ResultSet row = query.executeQuery()) {
-                        row.next();
-                        current = row.getBigDecimal(1);
-                    }
+                    query.setString(1, taskId); query.setString(2, resource);
+                    try (ResultSet row = query.executeQuery()) { row.next(); current = row.getBigDecimal(1); }
                 }
-                if (amount == null || amount.signum() <= 0 || amount.compareTo(target.subtract(current)) > 0) {
-                    connection.rollback();
-                    return null;
-                }
+                if (amount == null || amount.signum() <= 0 || amount.compareTo(target.subtract(current)) > 0) { connection.rollback(); return null; }
                 long id;
                 try (PreparedStatement insert = connection.prepareStatement(
                         "INSERT INTO bordergate_contribution(task_id,player_uuid,player_name,resource,amount,score,source_server,status,created_at) VALUES(?,?,?,?,?,?,?,'PENDING',?)",
                         Statement.RETURN_GENERATED_KEYS)) {
-                    insert.setString(1, taskId);
-                    insert.setString(2, uuid.toString());
-                    insert.setString(3, playerName);
-                    insert.setString(4, resource);
-                    insert.setBigDecimal(5, amount);
-                    insert.setBigDecimal(6, score);
-                    insert.setString(7, serverId);
-                    insert.setLong(8, System.currentTimeMillis());
-                    insert.executeUpdate();
-                    try (ResultSet keys = insert.getGeneratedKeys()) {
-                        if (!keys.next()) {
-                            connection.rollback();
-                            return null;
-                        }
-                        id = keys.getLong(1);
-                    }
+                    insert.setString(1, taskId); insert.setString(2, uuid.toString()); insert.setString(3, playerName);
+                    insert.setString(4, resource); insert.setBigDecimal(5, amount); insert.setBigDecimal(6, score);
+                    insert.setString(7, serverId); insert.setLong(8, System.currentTimeMillis()); insert.executeUpdate();
+                    try (ResultSet keys = insert.getGeneratedKeys()) { if (!keys.next()) { connection.rollback(); return null; } id = keys.getLong(1); }
                 }
-                connection.commit();
-                return new Reservation(id, taskId, uuid, resource, amount, score);
-            } catch (SQLException | RuntimeException ex) {
-                connection.rollback();
-                throw ex;
-            }
+                connection.commit(); return new Reservation(id, taskId, uuid, resource, amount, score);
+            } catch (SQLException | RuntimeException ex) { connection.rollback(); throw ex; }
         } catch (SQLException ex) {
-            plugin.getLogger().warning("Could not reserve cross-server contribution: " + ex.getMessage());
-            return null;
+            plugin.getLogger().warning("Could not reserve cross-server contribution: " + ex.getMessage()); return null;
         }
     }
 
@@ -252,7 +226,7 @@ final class NetworkStore implements AutoCloseable {
         if (!available) return List.of();
         List<TaskSnapshot> tasks = new ArrayList<>();
         String extra = currentIds.isEmpty() ? "" : " OR task_id IN (" + String.join(",", java.util.Collections.nCopies(currentIds.size(), "?")) + ")";
-        String sql = "SELECT task_id,server_id,cadence,title,ends_at,required_count,status,reward_per_player,reward_mode,reward_scale,template_id,automatic_border,maximum_change_percent FROM bordergate_task WHERE status IN ('ACTIVE','COMPLETE')" + extra + " ORDER BY server_id,cadence";
+        String sql = "SELECT task_id,server_id,cadence,title,ends_at,required_count,status,reward_per_player,reward_mode,reward_scale,template_id,automatic_border,maximum_change_percent,score_multiplier FROM bordergate_task WHERE status IN ('ACTIVE','COMPLETE')" + extra + " ORDER BY server_id,cadence";
         try (Connection connection = connect(); PreparedStatement query = connection.prepareStatement(sql)) {
             for (int i = 0; i < currentIds.size(); i++) query.setString(i + 1, currentIds.get(i));
             try (ResultSet rows = query.executeQuery()) {
@@ -280,7 +254,7 @@ final class NetworkStore implements AutoCloseable {
                     }
                     tasks.add(new TaskSnapshot(id, rows.getString(2), rows.getString(4), rows.getString(3), rows.getLong(5),
                             rows.getInt(6), targets, progress, scores, rows.getString(7), rows.getBigDecimal(8),
-                            rows.getString(9), rows.getInt(10), rows.getString(11), rows.getBoolean(12), rows.getDouble(13)));
+                            rows.getString(9), rows.getInt(10), rows.getString(11), rows.getBoolean(12), rows.getDouble(13), rows.getBigDecimal(14)));
                 }
             }
             return tasks;

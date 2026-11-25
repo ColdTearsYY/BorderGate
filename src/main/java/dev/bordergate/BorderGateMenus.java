@@ -358,7 +358,7 @@ final class BorderGateMenus implements Listener {
     }
     private void handleAdmin(Player player,int slot) {
         if(!player.hasPermission("bordergate.admin")){openHome(player);return;}
-        if(slot==10)settleCurrent("daily");else if(slot==12)settleCurrent("weekly");else if(slot==14)settleCurrent("monthly");else if(slot==16){plugin.reloadSettings();player.sendMessage(text("messages.reloaded","&aBorderGate 已重载"));}else if(slot==21)plugin.adjustBorder(-128);else if(slot==23)plugin.adjustBorder(128);else if(slot==26)openHome(player);else openAdmin(player);
+        if(slot==10)settleCurrent("daily");else if(slot==12)settleCurrent("weekly");else if(slot==14)settleCurrent("monthly");else if(slot==16)player.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&',plugin.reloadSettings()));else if(slot==21)plugin.adjustBorder(-128);else if(slot==23)plugin.adjustBorder(128);else if(slot==26)openHome(player);else openAdmin(player);
     }
     private void settleCurrent(String cadence) {String id=plugin.questService().currentTaskId(cadence);QuestCycle cycle=plugin.questService().cycle(id);if(cycle!=null)plugin.settleQuest(id,cycle.isComplete());}
     private void pagination(Holder holder,int total,int perPage,int previous,int next) {if(holder.page>0)set(holder.inventory,previous,Material.ARROW,text("gui.previous-page","&e上一页"),List.of());if((holder.page+1)*perPage<total)set(holder.inventory,next,Material.ARROW,text("gui.next-page","&e下一页"),List.of());}

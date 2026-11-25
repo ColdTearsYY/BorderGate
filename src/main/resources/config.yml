@@ -34,6 +34,11 @@ tasks:
     source: auto
     title: '&a每日边界维护'
     score-multiplier: 1.0
+    target-multiplier: 1.0
+    automatic-template: ''
+    target-multipliers: {}
+    # Optional; omit to use the selected built-in template's default.
+    # automatic-required-count: 2
     border-transition-seconds: 30
     # Used only when source: manual (or automation.enabled: false).
     required-count: 2
@@ -56,6 +61,11 @@ tasks:
     source: auto
     title: '&6每周边界远征'
     score-multiplier: 3.0
+    target-multiplier: 1.0
+    automatic-template: ''
+    target-multipliers: {}
+    # Optional; omit to use the selected built-in template's default.
+    # automatic-required-count: 3
     border-transition-seconds: 120
     # Manual-mode fallback only; automatic templates have their own conditions.
     required-count: 3
@@ -78,6 +88,11 @@ tasks:
     source: auto
     title: '&d每月疆域建设'
     score-multiplier: 6.0
+    target-multiplier: 1.0
+    automatic-template: ''
+    target-multipliers: {}
+    # Optional; omit to keep the selected built-in template's default completion count.
+    # automatic-required-count: 3
     # +/- percent of the current effective ceiling, NOT current border size.
     maximum-change-percent: 5.0
     border-transition-seconds: 120

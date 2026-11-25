@@ -101,9 +101,10 @@ final class QuestService {
         for (NetworkStore.TaskSnapshot snapshot : snapshots) {
             QuestCycle cycle = cycles.get(snapshot.taskId());
             if (cycle == null || !cycle.targets().equals(snapshot.targets()) || cycle.requiredCount() != snapshot.requiredCount()
-                    || !cycle.title().equals(snapshot.title())) {
+                    || !cycle.title().equals(snapshot.title())
+                    || snapshot.scoreMultiplier() != null && cycle.scoreMultiplier().compareTo(snapshot.scoreMultiplier()) != 0) {
                 cycle = new QuestCycle(snapshot.taskId(), snapshot.title(), snapshot.cadence(), snapshot.targets(), snapshot.requiredCount(),
-                        decimal(plugin.getConfig().get("tasks." + snapshot.cadence() + ".score-multiplier"), BigDecimal.ONE));
+                        decimal(snapshot.scoreMultiplier(), decimal(plugin.getConfig().get("tasks." + snapshot.cadence() + ".score-multiplier"), BigDecimal.ONE)));
                 cycles.put(snapshot.taskId(), cycle);
             }
             cycle.restoreAggregates(snapshot.contributed(), snapshot.scores());
@@ -135,7 +136,8 @@ final class QuestService {
         if (store != null && store.available()) {
             BigDecimal score = amount.multiply(BigDecimal.valueOf(100)).divide(cycle.targets().get(resource), java.math.MathContext.DECIMAL64)
                     .multiply(plugin.resourceWeight(resource)).multiply(cycle.scoreMultiplier());
-            NetworkStore.Reservation reservation = store.reserve(taskId, player.getUniqueId(), player.getName(), resource, amount, score);
+            NetworkStore.Reservation reservation = store.reserve(taskId, player.getUniqueId(), player.getName(), resource, amount, score,
+                    cycle.scoreMultiplier(), cycle.targets().get(resource));
             if (reservation == null) return EconomyBridge.Result.INVALID;
             EconomyBridge.Result payment = plugin.economy().charge(player, resource, amount);
             if (payment != EconomyBridge.Result.SUCCESS) {
@@ -225,11 +227,15 @@ final class QuestService {
         }
     }
 
-    synchronized void reload() {
-        cycles.clear(); endsAt.clear(); settled.clear(); history.clear();
-        templateIds.clear(); automaticBorder.clear(); maximumChanges.clear(); recentTemplates.clear();
-        creationFailures.clear();
-        load();
+    synchronized String reload() {
+        schedule = new TaskSchedule(plugin.getConfig().getString("schedule.timezone", "UTC"),
+                plugin.getConfig().getInt("schedule.rollover-hour", 0));
+        long now = System.currentTimeMillis();
+        // Published task definitions and history are snapshots; only missing periods use the new config.
+        refreshNetworkTasks();
+        ensureCurrentPeriods(now);
+        save();
+        return "配置已热重载。当前进行中的任务、目标、进度和截止时间保持不变；新生成周期采用新任务数量与倍率；历史任务不重开。";
     }
 
     private String playerName(UUID uuid) {
@@ -311,6 +317,38 @@ final class QuestService {
         return cycle;
     }
 
+    private void validateDifficultyConfig(String cadence) {
+        positiveMultiplier("tasks." + cadence + ".score-multiplier", BigDecimal.ONE);
+        positiveMultiplier("tasks." + cadence + ".target-multiplier", BigDecimal.ONE);
+        ConfigurationSection perResource = plugin.getConfig().getConfigurationSection("tasks." + cadence + ".target-multipliers");
+        if (perResource != null) for (String resource : perResource.getKeys(false)) {
+            BigDecimal value = decimal(perResource.get(resource), null);
+            if (value == null || value.signum() <= 0 || value.compareTo(BigDecimal.valueOf(100)) > 0)
+                throw new IllegalArgumentException("target-multipliers." + resource + " must be >0 and <=100");
+        }
+        String templateId = plugin.getConfig().getString("tasks." + cadence + ".automatic-template", "").trim();
+        if (!templateId.isEmpty() && dev.bordergate.core.TaskTemplatePool.catalogue().stream().noneMatch(template -> template.id().equals(templateId)))
+            throw new IllegalArgumentException("Unknown automatic-template: " + templateId);
+        if (plugin.getConfig().contains("tasks." + cadence + ".automatic-required-count")) {
+            int required = plugin.getConfig().getInt("tasks." + cadence + ".automatic-required-count", -1);
+            if (required < 1 || required > 4) throw new IllegalArgumentException("automatic-required-count must be between 1 and 4");
+        }
+    }
+
+    private BigDecimal positiveMultiplier(String path, BigDecimal fallback) {
+        BigDecimal value = decimal(plugin.getConfig().get(path), fallback);
+        if (value == null || value.signum() <= 0 || value.compareTo(BigDecimal.valueOf(100)) > 0)
+            throw new IllegalArgumentException(path + " must be >0 and <=100");
+        return value;
+    }
+
+    private Map<String, BigDecimal> resourceMultipliers(String cadence) {
+        Map<String, BigDecimal> values = new LinkedHashMap<>();
+        ConfigurationSection section = plugin.getConfig().getConfigurationSection("tasks." + cadence + ".target-multipliers");
+        if (section != null) for (String key : section.getKeys(false)) values.put(key, decimal(section.get(key), BigDecimal.ONE));
+        return values;
+    }
+
     private QuestCycle createCycle(String cadence, String id) {
         ConfigurationSection section = plugin.getConfig().getConfigurationSection("tasks." + cadence);
         if (!plugin.getConfig().getBoolean("tasks." + cadence + ".enabled", true)) {
@@ -319,15 +357,27 @@ final class QuestService {
         }
         boolean automatic = plugin.getConfig().getBoolean("automation.enabled", true)
                 && !"manual".equalsIgnoreCase(plugin.getConfig().getString("tasks." + cadence + ".source", "auto"));
-        BigDecimal multiplier = decimal(plugin.getConfig().get("tasks." + cadence + ".score-multiplier"), BigDecimal.ONE);
+        try { validateDifficultyConfig(cadence); }
+        catch (RuntimeException ex) {
+            creationFailures.put(id, automatic ? TaskAvailability.NO_TEMPLATE : TaskAvailability.NO_TARGETS);
+            plugin.getLogger().warning("Invalid next-period task configuration for " + cadence + "; no new task created: " + ex.getMessage());
+            return null;
+        }
+        BigDecimal multiplier = positiveMultiplier("tasks." + cadence + ".score-multiplier", BigDecimal.ONE);
         maximumChanges.put(id, plugin.getConfig().getDouble("tasks." + cadence + ".maximum-change-percent", 5));
         automaticBorder.put(id, automatic);
         if (plugin.cooperation() != null) plugin.cooperation().taskStarted(id, System.currentTimeMillis());
         if (automatic) {
             List<String> recent = recentTemplates.computeIfAbsent(cadence, ignored -> new ArrayList<>());
             java.util.Set<String> avoided = plugin.cooperation() == null ? java.util.Set.of() : plugin.cooperation().stalled(cadence);
-            var template = dev.bordergate.core.TaskTemplatePool.select(id, cadence, java.util.Set.copyOf(recent), resource -> templateResourceAvailable(resource) && !avoided.contains(resource));
-            if (template == null && !avoided.isEmpty()) template = dev.bordergate.core.TaskTemplatePool.select(id, cadence, java.util.Set.copyOf(recent), this::templateResourceAvailable);
+            String configuredTemplate = plugin.getConfig().getString("tasks." + cadence + ".automatic-template", "").trim();
+            var template = configuredTemplate.isEmpty() ? null : dev.bordergate.core.TaskTemplatePool.catalogue().stream()
+                    .filter(option -> option.id().equals(configuredTemplate))
+                    .filter(option -> option.targets().keySet().stream().allMatch(this::templateResourceAvailable)).findFirst().orElse(null);
+            if (template == null && configuredTemplate.isEmpty())
+                template = dev.bordergate.core.TaskTemplatePool.select(id, cadence, java.util.Set.copyOf(recent), resource -> templateResourceAvailable(resource) && !avoided.contains(resource));
+            if (template == null && configuredTemplate.isEmpty() && !avoided.isEmpty())
+                template = dev.bordergate.core.TaskTemplatePool.select(id, cadence, java.util.Set.copyOf(recent), this::templateResourceAvailable);
             if (template == null) {
                 creationFailures.put(id, TaskAvailability.NO_TEMPLATE);
                 plugin.getLogger().warning("No compatible automatic template for " + id);
@@ -339,7 +389,12 @@ final class QuestService {
             String label = switch (cadence) { case "weekly" -> "&6每周远征"; case "monthly" -> "&d每月拓疆"; default -> "&a每日守护"; };
             String title = plugin.getConfig().getString("tasks." + cadence + ".title", label) + " · " + template.title();
             double scale = plugin.cooperation() == null ? 1 : plugin.cooperation().scale(cadence);
-            return new QuestCycle(id, title, cadence, dev.bordergate.core.AdaptiveTaskPolicy.scaleTargets(template.targets(), scale), template.requiredCount(), multiplier);
+            Map<String, BigDecimal> scaled = dev.bordergate.core.TaskDifficultyPolicy.scaleTargets(
+                    dev.bordergate.core.AdaptiveTaskPolicy.scaleTargets(template.targets(), scale),
+                    positiveMultiplier("tasks." + cadence + ".target-multiplier", BigDecimal.ONE), resourceMultipliers(cadence));
+            int configuredRequired = plugin.getConfig().getInt("tasks." + cadence + ".automatic-required-count", template.requiredCount());
+            int required = Math.max(1, Math.min(configuredRequired, scaled.size()));
+            return new QuestCycle(id, title, cadence, scaled, required, multiplier);
         }
         if (section == null) {
             creationFailures.put(id, TaskAvailability.NO_TARGETS);

@@ -128,7 +128,7 @@ final class BorderGateCommand implements CommandExecutor, TabCompleter {
                 } catch (NumberFormatException ex) { sender.sendMessage("直径必须是正数，秒数必须是有效的非负整数。"); }
             }
             case "recommend" -> recommend(sender);
-            case "reload" -> { plugin.reloadSettings(); sender.sendMessage("配置已重载；已保存任务、目标和期限保持不变，新周期采用新配置。"); }
+            case "reload" -> sender.sendMessage(plugin.reloadSettings());
             default -> sender.sendMessage("用法: /bg <view|status|donate|guide|lands|towns|reminders|cooperation|settle|reset|initialize|setsize|recommend|reload>；控制台代开: bordergate open <在线玩家名>");
         }
         return true;

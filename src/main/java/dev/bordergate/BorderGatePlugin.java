@@ -371,11 +371,12 @@ public final class BorderGatePlugin extends JavaPlugin {
         });
     }
 
-    void reloadSettings() {
+    String reloadSettings() {
         reloadConfig();
-        if (questService != null) questService.reload();
+        String taskReport = questService == null ? "任务服务尚未就绪。" : questService.reload();
         if (cooperation != null) cooperation.refreshClaims();
         Bukkit.getGlobalRegionScheduler().run(this, task -> initializeWorld());
+        return taskReport;
     }
 
     double minimumSize() { return getConfig().getDouble("border.minimum-size", 1000); }
